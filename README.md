@@ -115,7 +115,7 @@ Both GUI picker *and* CLI auto‑update on the next build.
 | **HTTP 403 months later** | Refresh‑token expired → run `--login` again |
 | **Build fails on Intel Mac** | Xcode 16.3 + Swift 6 toolchain required |
 
-## License
+## License
 
 MIT — see LICENSE.
 
