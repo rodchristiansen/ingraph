@@ -1,147 +1,120 @@
-# Ingraph
-> Intune • Microsoft Graph • macOS SwiftUI GUI & CLI
+# Ingraph
+> Microsoft Intune / Microsoft Graph **device‑actions toolkit** • macOS SwiftUI GUI + CLI
 
----
+<img src="/Assets.xcassets/AppIcon.appiconset/Icon-macOS-512x512@2x.png" alt="Ingraph" width="300">
 
-## What Is It?
-**Ingraph** is a macOS desktop app + CLI that lets you run targeted Microsoft Intune / Graph API actions (sync, reboot, retire, wipe, Defender scan, …) against one or more devices by serial number.
+## What is Ingraph?
 
-* **GUI** – quick, paste‑serials‑&‑click workflow
-* **`ingraphutil` CLI** – script or pipeline friendly
-* **Auth** – secure delegated OAuth 2.0 device‑code flow, no secrets
-* **No platform lock‑in** – standard Swift PM package; open with Xcode or build via `swift build`
+| Surface | When you’d use it |
+|---------|-------------------|
+| **SwiftUI GUI** | one‑off tasks – paste serials · click action |
+| **`ingraphutil` CLI** | scripting, DevOps pipelines, cron jobs |
 
----
+Ingraph lets Intune administrators trigger **targeted device actions** (Sync, Reboot, Retire, Wipe, Defender scan …) against one or many devices **by serial‑number**.
 
-## Prerequisites
-| Requirement | Why |
-|-------------|-----|
-| **macOS 14+** | Swift 6 concurrency & SwiftUI runtime |
-| **Swift 6 toolchain / Xcode 16.3+** | builds the package |
-| **Azure AD app registration (public‑client)** | delegated auth for API permissions |
+* 100 % Swift Package (Xcode or `swift build`)
+* OAuth 2 **delegated** flow — *no client secret required*
+* Access‑ & refresh‑tokens stored in **macOS Keychain** and auto‑renewed
+* Drop‑in service‑principal cache for non‑interactive CI/CD use
 
----
-
-## 1 · Create the Azure AD Child App
-
-1. **Azure Portal → Entra ID → App registrations → New**.
-2. *Name*: `Ingraph‑client`.
-3. *Account type*: *Single‑tenant* (recommended).
-4. *Platform*: *Mobile and desktop* ➜ redirect URI `msal<CLIENT_ID>://auth`.
-5. *Add delegated API permissions* → **Microsoft Graph**
-   * `DeviceManagementServiceConfig.ReadWrite.All`
-   * `Device.ReadWrite.All`
-   * `offline_access` (under *OpenID permissions*)
-6. *Grant admin consent* for those three scopes.
-7. Copy the **Application (ID)** ⇒ `AZURE_CLIENT_ID`.
-
-> **Why a child app?**
-> Your production “parent” app might have powerful application roles.
-> This public‑client holds **only** the two delegated scopes, no secret, no
-> app‑roles – keeping blast radius minimal.
-
----
-
-## 2 · One‑Time Login (device‑code)
+## Quick start
 
 ```bash
-az login \
-  --tenant   <AZURE_TENANT_ID> \
-  --client-id <AZURE_CLIENT_ID> \
-  --scope "https://graph.microsoft.com/DeviceManagementServiceConfig.ReadWrite.All https://graph.microsoft.com/Device.ReadWrite.All"
+# 1 · Clone & build (Swift 6 toolchain / Xcode 16.3+)
+$ git clone https://github.com/rodchristiansen/ingraph.git
+$ cd ingraph
+$ swift build -c release               # ./.build/release/{Ingraph,ingraphutil}
 
-Azure CLI prints a URL + 9‑character code.
-Open the URL, enter the code, complete MFA.
-After success, Azure CLI silently refreshes tokens for up to 90 days.
+# 2 · (One‑time) login – caches token in Keychain
+$ ./.build/release/ingraphutil --login  # opens browser ➜ MFA etc.
 
+# 3 · Run a command
+$ ./.build/release/ingraphutil sync C02XXX12345,C02YYY67890
+```
 
-## 3 · Clone & Build
+To use the GUI:
 
-git clone https://github.com/your‑org/ingraph.git
-cd ingraph
+```bash
+$ swift run Ingraph     # or open Package.swift in Xcode
+```
 
-# export once or add to ~/.zshrc
-export AZURE_TENANT_ID=<tenant-guid>
-export AZURE_CLIENT_ID=<client-guid>
+## Authentication flow
 
-# GUI
-swift run Ingraph                   # or open Package.swift in Xcode
+1. **Service‑principal cache** — if `~/.azure/service_principal_entries.json` contains a `client_secret`, Ingraph performs a confidential‑client flow (fully headless).
+2. **Delegated child‑app** — otherwise it tries the *public‑client* child registration (`Ingraph‑client`) that holds only two delegated Intune scopes.
+3. **Device‑code Fallback** — first interactive run prints the familiar URL + 9‑character code (handy on headless hosts).
+4. **Silent refresh** — refresh‑tokens renew in the background until you revoke them.
 
-# CLI example
-swift run ingraphutil sync C02XXX12345,C02YYY67890
+## Creating the child app (one‑time)
 
+1. *Entra ID ▸ App registrations ▸ New.*  
+   *Name*: **Ingraph‑client** · *Single‑tenant*
+2. *Platform* → **Mobile and desktop** · redirect URI `msal<CLIENT_ID>://auth`
+3. *API permissions* → **Microsoft Graph** → **Delegated**
+   * `DeviceManagementServiceConfig.ReadWrite.All`
+   * `Device.ReadWrite.All`
+   * `offline_access`
+4. **Grant admin consent** (a Global Admin does this once).
+5. Copy the *Application (ID)* → either export as env‑vars or add to the json cache below.
 
+### Configuration options
 
+| Var / file | Needed when | Example |
+|------------|-------------|---------|
+| `AZURE_TENANT_ID` | always | `d22686a0‑…` |
+| `AZURE_CLIENT_ID` | if you skip the json file | child‑app GUID |
+| `~/.azure/service_principal_entries.json` | CI / headless | see snippet |
 
-## 4 · GUI Usage
-    1.    Paste one or more serial numbers (comma, space, or newline separated).
-    2.    Click Lookup – devices appear with their userPrincipalName.
-    3.    Choose an action: Sync, Reboot, Retire, Wipe, Defender scan, …
-    4.    Click Run.
-    5.    Status lines stream in the log pane.
+`~/.azure/service_principal_entries.json`
+```json
+[
+  {
+    "tenant":        "TENANT_ID",
+    "client_id":     "CLIENT_ID",
+    "client_secret": "CLIENT_SECRET"
+  }
+]
+```
 
-Auth happens automatically: silent refresh → device‑code prompt (only if
-needed).
+## CLI reference
 
+```text
+ingraphutil --login                 # one‑time browser login
 
-## 5 · CLI Usage
+ingraphutil sync          <serial[,…]>
+ingraphutil reboot         <serial[,…]>
+ingraphutil retire         <serial[,…]>
+ingraphutil wipe           <serial[,…]>
+ingraphutil scandefender   <serial[,…]>
+```
+Exit codes: **0** success · **1** usage · **2** Graph/API error.
 
-# general pattern
-ingraphutil <command> <serial[,serial…]>
+## Extending commands
 
-# examples
-ingraphutil sync   C02XXX12345
-ingraphutil wipe   C02XXX12345,C02YYY67890
-ingraphutil reboot C02ZZZ99999
+1. **Models.swift** – add a case to `MDMCommand`.  
+2. **GraphClient.perform(_:on:)** – map the new case to a Graph endpoint + JSON body.
 
-Exit codes: 0 success, 1 wrong args, 2 Graph error.
+Both GUI picker *and* CLI auto‑update on the next build.
 
+## Security posture
 
-## 6 · Extending Commands
+* **No secrets on disk** in delegated mode; tokens are Keychain‑encrypted.
+* **Least‑privilege** — exactly two Intune delegated scopes, no wildcard Graph access.
+* **Instant revocation**  
+  • Remove user from *Intune Admins* group **or** delete their refresh‑tokens.  
+  • If the app itself is compromised, delete/rotate the public‑client registration.
+* **Auditable** — every call is a first‑party Graph request → visible in Entra sign‑ins & Intune audit logs.
 
-Sources/IngraphCore/Models.swift
+## Troubleshooting
 
-enum MDMCommand {
-    case yourNewCommand
-}
+| Symptom | Fix |
+|---------|-----|
+| **`invalid_client` · AADSTS7000218** | Public‑client mistakenly has a secret → clear `client_secret` or recreate app |
+| **`AADSTS65002` during `az login --scope …`** | Use Ingraph’s delegated client, or just run `ingraphutil --login` |
+| **HTTP 403 months later** | Refresh‑token expired → run `--login` again |
+| **Build fails on Intel Mac** | Xcode 16.3 + Swift 6 toolchain required |
 
-GraphClient.run(_:on:) – add the Graph endpoint + body.
-The GUI picker and CLI auto‑update.
-
-
-## 7 · Project Structure
-
-.
-├── Package.swift           ← Swift PM manifest
-├── Sources
-│   ├── IngraphCore         ← shared Graph client + models
-│   ├── IngraphApp          ← SwiftUI GUI
-│   └── IngraphCLI          ← headless executable
-└── README.md
-
-
-
-
-## 8 · Security Notes
-    •    Device‑code flow = no client secret.
-    •    Tokens cached in Keychain by MSAL, encrypted at rest.
-    •    Scopes scoped – only two delegated permissions, no Graph wildcard.
-    •    Revoke by deleting the app registration or per‑user refresh tokens.
-
-
-## Troubleshooting
-
-Symptom    Fix
-“No account matching identifier”    Run az logout then repeat az login …
-HTTP 403 after months    Device‑code token lifetime ended → rerun az login …
-Status 429    You’re rate‑limited; back off or batch requests
-Build fails on Intel Mac    Ensure Xcode 16.3+, set toolchain to Swift 6 preview
-
-
-
-
-## License
+## License
 
 MIT — see LICENSE.
-
 
