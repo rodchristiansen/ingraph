@@ -1,5 +1,6 @@
 # Ingraph
-> Microsoft Intune / Microsoft Graph **device‑actions toolkit** • macOS SwiftUI GUI + CLI
+
+Microsoft Intune / Microsoft Graph **device‑actions toolkit** • macOS SwiftUI GUI + CLI
 
 <img src="/Assets.xcassets/AppIcon.appiconset/Icon-macOS-512x512@2x.png" alt="Ingraph" width="300">
 
